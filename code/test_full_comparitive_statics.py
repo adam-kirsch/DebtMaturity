@@ -446,7 +446,7 @@ def plot_comparative_static(all_results, param_name, param_values, param_label, 
     
     plt.tight_layout()
     
-    output_dir = Path('output/figures')
+    output_dir = Path(__file__).parent / '../output/figures'
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f'cs_full_{filename}.png'
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
