@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+
+# Data 
+data/
+
+# Output
+output/
+
+# OS
+.DS_Store
