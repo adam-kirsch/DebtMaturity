@@ -1,7 +1,6 @@
 """
 Test comparative statics using the FULL MODEL solution.
 Verify Table 3.1 relationships with actual K̄*, T̂, K̂.
-COMPLETE VERSION.
 """
 
 import numpy as np
