@@ -38,40 +38,40 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir):
     ax1.legend()
     ax1.grid(True, alpha=0.3)
     
-    # Panel 2: Optimal Maturity T̂(x)
+        # Panel 2: Optimal Maturity T̂(x)
     ax2 = plt.subplot(3, 3, 2)
     if len(x_feas) > 0:
-        ax2.plot(x_feas, T_hat, 'o-', linewidth=2, markersize=4)
+        ax2.plot(x_feas, T_hat, '-', linewidth=2.5, color='steelblue')
         ax2.set_xlabel('Earnings x')
         ax2.set_ylabel('T̂(x)')
         ax2.set_title('Optimal Maturity')
         ax2.grid(True, alpha=0.3)
     
-    # Panel 3: Optimal Face Value K̂(x)
+        # Panel 3: Optimal Face Value K̂(x)
     ax3 = plt.subplot(3, 3, 3)
     if len(x_feas) > 0:
-        ax3.plot(x_feas, K_hat, 'o-', linewidth=2, markersize=4, color='green')
+        ax3.plot(x_feas, K_hat, '-', linewidth=2.5, color='green')
         ax3.axhline(params.K_0, color='r', linestyle='--', alpha=0.5)
         ax3.set_xlabel('Earnings x')
         ax3.set_ylabel('K̂(x)')
         ax3.set_title('Optimal Face Value')
         ax3.grid(True, alpha=0.3)
     
-    # Panel 4: Yield Spread
+        # Panel 4: Yield Spread
     ax4 = plt.subplot(3, 3, 4)
     if len(x_feas) > 0:
-        ax4.plot(x_feas, spread_bp, 'o-', 
-                linewidth=2, markersize=4, color='purple')
+        ax4.plot(x_feas, spread_bp, '-', 
+                linewidth=2.5, color='purple')
         ax4.set_xlabel('Earnings x')
         ax4.set_ylabel('Spread (bp)')
         ax4.set_title('Yield Spread')
         ax4.grid(True, alpha=0.3)
     
-    # Panel 5: Bond Value B̂(x)
+        # Panel 5: Bond Value B̂(x)
     ax5 = plt.subplot(3, 3, 5)
     if len(x_feas) > 0:
-        ax5.plot(x_feas, B_hat, 'o-', 
-                linewidth=2, markersize=4, color='brown')
+        ax5.plot(x_feas, B_hat, '-', 
+                linewidth=2.5, color='brown')
         ax5.axhline(params.K_0, color='r', linestyle='--', label='K₀', alpha=0.5)
         ax5.set_xlabel('Earnings x')
         ax5.set_ylabel('B̂(x)')
@@ -101,12 +101,12 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir):
     ax7.set_title('Refinancing Capacity Ratio')
     ax7.grid(True, alpha=0.3)
     
-    # Panel 8: Default probability (approximate)
+        # Panel 8: Default probability (approximate)
     ax8 = plt.subplot(3, 3, 8)
     if len(x_feas) > 0:
         default_prob = 1 - (B_hat / K_hat)
-        ax8.plot(x_feas, default_prob * 100, 'o-', 
-                linewidth=2, markersize=4, color='red')
+        ax8.plot(x_feas, default_prob * 100, '-', 
+                linewidth=2.5, color='red')
         ax8.set_xlabel('Earnings x')
         ax8.set_ylabel('Default Prob (%)')
         ax8.set_title('Approximate Default Probability')
@@ -149,7 +149,10 @@ Spread:
             verticalalignment='center')
     
     plt.tight_layout()
-    
+
+
+    output_dir = Path(__file__).parent / '../output/figures'
+    output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / 'base_case_results.png'
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     print(f"✓ Saved figure to {output_path}")
@@ -167,10 +170,10 @@ def solve_base_case():
     p = Params()
     p.validate()
     
-    # Use smaller grids for initial test
-    x_grid = np.linspace(p.x_min, p.x_max, 30)  # Start small
-    K_grid = np.linspace(p.K_min, p.K_max, 40)
-    T_grid = np.linspace(p.T_min, p.T_max, 30)
+        # Use finer grids for smooth plots
+    x_grid = np.linspace(p.x_min, p.x_max, 100)  # More points for smooth curves
+    K_grid = np.linspace(p.K_min, p.K_max, 80)   # Finer K grid
+    T_grid = np.linspace(p.T_min, p.T_max, 60)   # Finer T grid
     
     print(f"\nGrid sizes: x={len(x_grid)}, K={len(K_grid)}, T={len(T_grid)}")
     print(f"Total computations: ~{len(x_grid) * len(K_grid) * len(T_grid):,}")
@@ -203,7 +206,7 @@ def solve_base_case():
     print("STEP 3: Saving Results")
     print("-"*70)
     
-    output_dir = Path('data/results/base_case')
+    output_dir = Path('Maturity/data/results/base_case')
     output_dir.mkdir(parents=True, exist_ok=True)
     
     save_data = {
