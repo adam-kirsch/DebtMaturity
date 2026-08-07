@@ -170,10 +170,10 @@ def solve_base_case():
     p = Params()
     p.validate()
     
-        # Use finer grids for smooth plots
-    x_grid = np.linspace(p.x_min, p.x_max, 100)  # More points for smooth curves
-    K_grid = np.linspace(p.K_min, p.K_max, 80)   # Finer K grid
-    T_grid = np.linspace(p.T_min, p.T_max, 60)   # Finer T grid
+    # Balanced grids: smooth curves but faster runtime (~3-5 min)
+    x_grid = np.linspace(p.x_min, p.x_max, 50)   # Earnings grid
+    K_grid = np.linspace(p.K_min, p.K_max, 40)   # Face value grid
+    T_grid = np.linspace(p.T_min, p.T_max, 30)   # Maturity grid
     
     print(f"\nGrid sizes: x={len(x_grid)}, K={len(K_grid)}, T={len(T_grid)}")
     print(f"Total computations: ~{len(x_grid) * len(K_grid) * len(T_grid):,}")
@@ -182,7 +182,7 @@ def solve_base_case():
     cir = CIRProcess(p.kappa, p.mu, p.sigma)
     print(f"\n{cir}")
     
-    # Initialize bond valuation
+    # Initialize bond valuation (guess before iteration)
     bond_val = BondValuation(cir, p.r, p.eta, p.C)
     
     # STEP 1: Solve for K̄*(x)
@@ -191,7 +191,7 @@ def solve_base_case():
     print("-"*70)
     
     ref_solver = RefinancingSetSolver(bond_val, x_grid, K_grid, T_grid)
-    K_bar_array, K_bar_func = ref_solver.solve(tol=1e-3, max_iter=50, verbose=True)
+    K_bar_array, K_bar_func = ref_solver.solve(tol=1e-6, max_iter=500, verbose=True)
     
     # STEP 2: Find optimal bonds
     print("\n" + "-"*70)

@@ -20,8 +20,8 @@ class Params:
     
     # Computational grids (start small for testing)
     x_min = 0.5
-    x_max = 25.0
-    n_x = 50            # Number of earnings grid points
+    x_max = 100.0
+    n_x = 200            # Number of earnings grid points
     
     K_min = 0.0
     K_max = 500.0
