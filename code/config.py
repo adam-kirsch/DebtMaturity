@@ -18,8 +18,8 @@ class Params:
     K_0 = 200.0         # Amount to refinance
     C = 30.0            # Fixed refinancing cost
     
-    # Computational grids (start small for testing)
-    x_min = 0.5
+    # Computational grids 
+    x_min = 0.1
     x_max = 100.0
     n_x = 200            # Number of earnings grid points
     

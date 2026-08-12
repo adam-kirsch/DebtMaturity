@@ -1,9 +1,8 @@
-"""
-Find optimal bond (K̂, T̂)
-"""
+"""Find optimal bond (K̂, T̂)"""
 
 import numpy as np
 from scipy.interpolate import interp1d
+from firm_valuation import FirmValuation
 
 
 class OptimalBondSolver:
@@ -12,12 +11,42 @@ class OptimalBondSolver:
     def __init__(self, bond_valuation, K_bar_star_func):
         self.bond_val = bond_valuation
         self.K_bar_star_func = K_bar_star_func
+        self.firm_val = FirmValuation(bond_valuation)
+    
+    def V_bar_approximation(self, x, K):
+        """
+        Approximate continuation value V̄*(x, K) at maturity.
+        
+        Represents firm value if it reaches maturity with earnings x
+        and outstanding debt K.
+        
+        Parameters
+        ----------
+        x : float
+            Earnings at maturity
+        K : float
+            Face value outstanding
+            
+        Returns
+        -------
+        float
+            Approximate continuation value
+        """
+        F_x = self.bond_val.F_unlevered(x)
+        
+        # Check if firm can refinance at maturity
+        if self.K_bar_star_func(x) >= K + self.bond_val.C:
+            # Can refinance: firm continues, gets unlevered value minus debt
+            return F_x - K
+        else:
+            # Cannot refinance: potential default, get residual value
+            return max(0, F_x - K)
     
     def find_optimal_bond(self, x, K_0, K_grid, T_grid, verbose=False):
         """
         Find (K̂, T̂) that:
         1. Raises at least K_0 
-        2. Maximizes some objective (for now, minimize spread)
+        2. Maximizes firm value V^I (paper equation)
         
         Parameters
         ----------
@@ -52,9 +81,11 @@ class OptimalBondSolver:
                 if B_I >= K_0:
                     feasible_found = True
                     
-                    # Objective: minimize face value (all else equal, lower K is better)
-                    # Or: maximize bond value relative to face value
-                    obj = B_I / K  # Higher is better (less default risk)
+                    # OBJECTIVE: Maximize V^I (firm value in illiquid state)
+                    # This is the correct objective from the paper
+                    obj = self.firm_val.V_illiquid(x, T, K, 
+                                                   self.K_bar_star_func,
+                                                   self.V_bar_approximation)
                     
                     if obj > best_obj:
                         best_obj = obj
@@ -123,3 +154,4 @@ class OptimalBondSolver:
                 print(f"  Spread range: [{np.min(results['spread_bp']):.1f}, {np.max(results['spread_bp']):.1f}] bp")
         
         return results
+

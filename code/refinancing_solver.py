@@ -37,7 +37,7 @@ class RefinancingSetSolver:
         
         return K_bar_new
     
-    def solve(self, tol=1e-3, max_iter=100, verbose=True):
+    def solve(self, tol=1e-5, max_iter=100, verbose=True):
         """Iterate until convergence."""
         # Initial guess
         K_bar = np.array([0.5 * self.bond_val.F_unlevered(x) for x in self.x_grid])

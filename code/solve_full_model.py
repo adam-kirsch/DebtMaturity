@@ -14,6 +14,49 @@ from refinancing_solver import RefinancingSetSolver
 from optimal_bond_solver import OptimalBondSolver
 
 
+def create_concentrated_grid(min_val, max_val, n_total, dense_end=2.0, dense_fraction=0.25):
+    """
+    Create non-uniform grid with more points concentrated at low values.
+    
+    Parameters
+    ----------
+    min_val : float
+        Minimum value
+    max_val : float
+        Maximum value
+    n_total : int
+        Total number of points
+    dense_end : float
+        Value up to which we want dense spacing
+    dense_fraction : float
+        Fraction of points to use in dense region (default 0.25 = 25%)
+    
+    Returns
+    -------
+    array
+        Non-uniform grid
+        
+    Example
+    -------
+    For x from 0.5 to 100 with 50 points and 25% dense:
+    - 17 points in [0.1, 2.0] (dense region)
+    - 33 points in [2.0, 100] (sparse region)
+    """
+    n_dense = int(n_total * dense_fraction)
+    n_sparse = n_total - n_dense
+    
+    # Dense spacing from min_val to dense_end
+    dense_grid = np.linspace(min_val, dense_end, n_dense)
+    
+    # Regular spacing from dense_end to max_val (exclude first point to avoid duplicate)
+    sparse_grid = np.linspace(dense_end, max_val, n_sparse + 1)[1:]
+    
+    # Concatenate
+    grid = np.concatenate([dense_grid, sparse_grid])
+    
+    return grid
+
+
 def plot_results(x_grid, K_bar_array, results, params, output_dir):
     """Plot all results."""
     
@@ -170,10 +213,12 @@ def solve_base_case():
     p = Params()
     p.validate()
     
-    # Balanced grids: smooth curves but faster runtime (~3-5 min)
-    x_grid = np.linspace(p.x_min, p.x_max, 50)   # Earnings grid
-    K_grid = np.linspace(p.K_min, p.K_max, 40)   # Face value grid
-    T_grid = np.linspace(p.T_min, p.T_max, 30)   # Maturity grid
+        # Create non-uniform grids: 25% of points in low-value regions
+    # For x: 17 points in [0.1, 2], 33 points in [2, 100]
+    # For T: 10 points in [0.1, 2], 20 points in [2, 50]  
+    x_grid = create_concentrated_grid(p.x_min, p.x_max, 50, dense_end=2.0, dense_fraction=0.25)
+    K_grid = np.linspace(p.K_min, p.K_max, 40)   # Face value (keep uniform)
+    T_grid = create_concentrated_grid(0.1, p.T_max, 30, dense_end=2.0, dense_fraction=0.25)
     
     print(f"\nGrid sizes: x={len(x_grid)}, K={len(K_grid)}, T={len(T_grid)}")
     print(f"Total computations: ~{len(x_grid) * len(K_grid) * len(T_grid):,}")
