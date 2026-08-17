@@ -57,7 +57,7 @@ def create_concentrated_grid(min_val, max_val, n_total, dense_end=2.0, dense_fra
     return grid
 
 
-def plot_results(x_grid, K_bar_array, results, params, output_dir):
+def plot_results(x_grid, K_bar_array, results, params, output_dir, cir, bond_val):
     """Plot all results."""
     
     fig = plt.figure(figsize=(16, 12))
@@ -110,7 +110,7 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir):
         ax4.set_title('Yield Spread')
         ax4.grid(True, alpha=0.3)
     
-        # Panel 5: Bond Value B̂(x)
+    # Panel 5: Bond Value B̂(x)
     ax5 = plt.subplot(3, 3, 5)
     if len(x_feas) > 0:
         ax5.plot(x_feas, B_hat, '-', 
@@ -121,6 +121,14 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir):
         ax5.set_title('Optimal Bond Value')
         ax5.legend()
         ax5.grid(True, alpha=0.3)
+    
+        # Print diagnostics
+        print(f"\nBond Value B̂(x) Statistics:")
+        print(f"  Min: {np.min(B_hat):.2f}")
+        print(f"  Max: {np.max(B_hat):.2f}")
+        print(f"  Range: {np.max(B_hat) - np.min(B_hat):.2f}")
+        print(f"  Mean: {np.mean(B_hat):.2f}")
+        print(f"  Std Dev: {np.std(B_hat):.2f}")
     
     # Panel 6: Maturity vs Face Value
     ax6 = plt.subplot(3, 3, 6)
@@ -144,15 +152,23 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir):
     ax7.set_title('Refinancing Capacity Ratio')
     ax7.grid(True, alpha=0.3)
     
-        # Panel 8: Default probability (approximate)
+    # Panel 8: Default probability (CIR-based)
     ax8 = plt.subplot(3, 3, 8)
     if len(x_feas) > 0:
-        default_prob = 1 - (B_hat / K_hat)
-        ax8.plot(x_feas, default_prob * 100, '-', 
+        # Calculate true default probability using CIR distribution
+        # P(default) = P(x_T < x*) = 1 - Q(x, T, x*)
+        default_prob_cir = []
+        for x, K, T in zip(x_feas, K_hat, T_hat):
+            x_star = bond_val.x_star(K)  # Default threshold
+            survival_prob = cir.Q(x, T, x_star)  # P(x_T > x*)
+            default_prob = 1 - survival_prob  # P(x_T < x*)
+            default_prob_cir.append(default_prob)
+    
+        ax8.plot(x_feas, np.array(default_prob_cir) * 100, '-', 
                 linewidth=2.5, color='red')
         ax8.set_xlabel('Earnings x')
         ax8.set_ylabel('Default Prob (%)')
-        ax8.set_title('Approximate Default Probability')
+        ax8.set_title('Default Probability')
         ax8.grid(True, alpha=0.3)
     
     # Panel 9: Summary text
@@ -243,7 +259,11 @@ def solve_base_case():
     print("STEP 2: Finding Optimal Bonds (K̂, T̂)")
     print("-"*70)
     
-    opt_solver = OptimalBondSolver(bond_val, K_bar_func)
+    # Choose optimization method
+    # Options: 'grid_search', 'slsqp', 'trust-constr', 'nelder-mead', 'hybrid'
+    optimization_method = 'trust-constr'  # Change this to test different methods
+    
+    opt_solver = OptimalBondSolver(bond_val, K_bar_func, method=optimization_method)
     results = opt_solver.solve_for_grid(x_grid, p.K_0, K_grid, T_grid, verbose=True)
     
     # STEP 3: Save results
@@ -276,7 +296,7 @@ def solve_base_case():
     fig_dir = Path('output/figures')
     fig_dir.mkdir(parents=True, exist_ok=True)
     
-    plot_results(x_grid, K_bar_array, results, p, fig_dir)
+    plot_results(x_grid, K_bar_array, results, p, fig_dir, cir, bond_val)
     
     # Print summary
     print("\n" + "="*70)

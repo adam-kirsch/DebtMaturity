@@ -23,6 +23,7 @@ def plot_liquid_values():
     
     # Setup
     p = Params()
+    p.K_0 = 250  # Override for this plot only
     cir = CIRProcess(p.kappa, p.mu, p.sigma)
     bond_val = BondValuation(cir, p.r, p.eta, p.C)
     firm_val = FirmValuation(bond_val)
@@ -31,7 +32,7 @@ def plot_liquid_values():
     x_values = np.linspace(1, 25, 200)
     
     # Fixed parameters for bonds
-    K_fixed = 200
+    K_fixed = 250
     T_fixed = 5.0
     
     # Calculate B^L and V^L

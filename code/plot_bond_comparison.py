@@ -32,6 +32,7 @@ def plot_liquid_vs_illiquid_bonds():
     
     # Setup
     p = Params()
+    p.K_0 = 350 
     cir = CIRProcess(p.kappa, p.mu, p.sigma)
     bond_val = BondValuation(cir, p.r, p.eta, p.C)
     
@@ -39,7 +40,7 @@ def plot_liquid_vs_illiquid_bonds():
     K_bar_func = lambda x: K_bar_approximate(x, bond_val, p.C)
     
     # Fixed bond parameters
-    K = 200
+    K = 300
     T = 5.0
     
     # Earnings grid
