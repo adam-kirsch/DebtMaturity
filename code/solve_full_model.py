@@ -195,9 +195,202 @@ def compute_feasible_face_value_bounds(x_grid, K_0, K_grid, T_grid, bond_val, K_
     }
 
 
+
+
+
+def plot_maturity_sensitivity(x_grid, K_grid, T_grid, bond_val, K_bar_func, params, output_dir, 
+                            n_x_samples=7, x_min_plot=None, x_max_plot=None):
+    """
+    Plot how firm value varies with maturity for different earnings levels.
+    
+    Parameters
+    ----------
+    x_grid : array
+        Earnings grid
+    K_grid : array
+        Face value grid
+    T_grid : array
+        Maturity grid
+    bond_val : BondValuation
+        Bond valuation object
+    K_bar_func : callable
+        Refinancing capacity function
+    params : Params
+        Model parameters
+    output_dir : Path
+        Output directory for figure
+    n_x_samples : int
+        Number of x values to sample (default: 7)
+    x_min_plot : float, optional
+        Minimum x value for plot range (default: use x_grid min)
+    x_max_plot : float, optional
+        Maximum x value for plot range (default: use x_grid max)
+    """
+    from firm_valuation import FirmValuation
+    
+    print(f"\nCreating maturity sensitivity plot with {n_x_samples} earnings levels...")
+    
+    firm_val = FirmValuation(bond_val)
+    
+    # Create a function for V̄ approximation
+    def V_bar_approx(x, K):
+        F_x = bond_val.F_unlevered(x)
+        if K_bar_func(x) >= K + bond_val.C:
+            return F_x - K
+        else:
+            return max(0, F_x - K)
+    
+    # Select a handful of x values across the range
+    # Use specified range or default to full grid range
+    if x_min_plot is None:
+        x_min_plot = x_grid[0]
+    if x_max_plot is None:
+        x_max_plot = x_grid[-1]
+    
+    # Use linear spacing for the specified range
+    x_samples = np.linspace(x_min_plot, x_max_plot, n_x_samples)
+    
+    print(f"  X values: {', '.join([f'{x:.1f}' for x in x_samples])}")
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Use a colormap for the different x values
+    colors = plt.cm.viridis(np.linspace(0, 1, n_x_samples))
+    
+    for i, x in enumerate(x_samples):
+        print(f"  Computing for x = {x:.2f}...")
+        
+        # For this x, compute optimal firm value for each T
+        firm_values_pct = []
+        
+        for T in T_grid:
+            # Find optimal K for this (x, T) pair
+            best_V = -np.inf
+            
+            for K in K_grid:
+                B_I = bond_val.B_illiquid(x, T, K, K_bar_func)
+                if B_I >= params.K_0:
+                    V_I = firm_val.V_illiquid(x, T, K, K_bar_func, V_bar_approx)
+                    if V_I > best_V:
+                        best_V = V_I
+            
+            firm_values_pct.append(best_V if best_V > -np.inf else np.nan)
+        
+        # Convert to numpy array
+        firm_values_pct = np.array(firm_values_pct)
+        
+        # Normalize to percentage of optimal for this x
+        valid_mask = ~np.isnan(firm_values_pct)
+        if np.any(valid_mask):
+            max_val = np.max(firm_values_pct[valid_mask])
+            if max_val > 0:
+                firm_values_pct_norm = (firm_values_pct / max_val) * 100
+                
+                # Plot this line
+                ax.plot(T_grid, firm_values_pct_norm, '-o', 
+                       color=colors[i], linewidth=2.5, markersize=5,
+                       label=f'x = {x:.1f}', alpha=0.85)
+    
+    # Formatting
+    ax.set_xlabel('Maturity T', fontsize=12)
+    ax.set_ylabel('Firm Value (% of optimal at each x)', fontsize=12)
+    ax.set_title('Firm Value vs Maturity for Different Earnings Levels', fontsize=14, fontweight='bold')
+    ax.legend(loc='best', fontsize=10, framealpha=0.9)
+    ax.grid(True, alpha=0.3, linestyle='--')
+    ax.set_ylim([95, 100])  # Focus on 95-100% range for better detail
+    
+    # Add horizontal line at 100%
+    ax.axhline(100, color='red', linestyle='--', linewidth=1.5, alpha=0.5, label='Optimal (100%)')
+    
+    plt.tight_layout()
+    
+    # Save figure
+    output_path = output_dir / 'maturity_sensitivity.png'
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"✓ Saved maturity sensitivity plot to {output_path}")
+    plt.close()
+
+
 def plot_results(x_grid, K_bar_array, results, params, output_dir, cir, bond_val, 
-                 K_grid, T_grid, K_bar_func, maturity_bounds=None, face_value_bounds=None):
-    """Plot all results."""
+                 K_grid, T_grid, K_bar_func, maturity_bounds=None, face_value_bounds=None,
+                 line_interpolation='linear', optimization_method='grid_search'):
+    """
+    Plot all results.
+    
+    Parameters
+    ----------
+    line_interpolation : str
+        Interpolation method for line plots: 'linear', 'cubic_spline', or 'pchip'
+        Must be explicitly specified
+    optimization_method : str
+        Optimization method used: 'grid_search', 'slsqp', 'trust-constr', etc.
+        Default: 'grid_search'
+    """
+
+    
+
+    from scipy.interpolate import make_interp_spline, PchipInterpolator
+    
+    def interpolate_line(x_data, y_data, method='linear', n_points=300):
+        """
+        Interpolate line data based on specified method.
+        
+        Parameters
+        ----------
+        x_data : array
+            X coordinates
+        y_data : array
+            Y coordinates
+        method : str
+            'linear', 'cubic_spline', or 'pchip'
+        n_points : int
+            Number of points for interpolated curve
+            
+        Returns
+        -------
+        x_interp, y_interp : arrays
+            Interpolated coordinates
+        """
+        if method == 'linear':
+            # Return original data for linear interpolation (matplotlib handles it)
+            return x_data, y_data
+        elif method == 'cubic_spline':
+            # Use cubic spline interpolation
+            if len(x_data) < 4:
+                # Not enough points for spline, fall back to linear
+                return x_data, y_data
+            
+            # Create dense x grid for smooth curve
+            x_interp = np.linspace(x_data.min(), x_data.max(), n_points)
+            
+            # Fit spline
+            try:
+                spline = make_interp_spline(x_data, y_data, k=3)  # cubic spline
+                y_interp = spline(x_interp)
+                return x_interp, y_interp
+            except:
+                # If spline fails, return original
+                return x_data, y_data
+        elif method == 'pchip':
+            # Use PCHIP (Piecewise Cubic Hermite Interpolating Polynomial)
+            if len(x_data) < 2:
+                # Not enough points, fall back to linear
+                return x_data, y_data
+            
+            # Create dense x grid for smooth curve
+            x_interp = np.linspace(x_data.min(), x_data.max(), n_points)
+            
+            # Fit PCHIP
+            try:
+                pchip = PchipInterpolator(x_data, y_data)
+                y_interp = pchip(x_interp)
+                return x_interp, y_interp
+            except:
+                # If PCHIP fails, return original
+                return x_data, y_data
+        else:
+            raise ValueError(f"Unknown interpolation method: {method}. Use 'linear', 'cubic_spline', or 'pchip'")
     
     fig = plt.figure(figsize=(16, 12))
     
@@ -208,9 +401,10 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir, cir, bond_val
     B_hat = results['B_hat']
     spread_bp = results['spread_bp']
     
-    # Panel 1: K̄*(x) - Refinancing Set
+        # Panel 1: K̄*(x) - Refinancing Set
     ax1 = plt.subplot(3, 3, 1)
-    ax1.plot(x_grid, K_bar_array, 'b-', linewidth=2, label='K̄*(x)')
+    x_interp, K_bar_interp = interpolate_line(x_grid, K_bar_array, method=line_interpolation)
+    ax1.plot(x_interp, K_bar_interp, 'b-', linewidth=2, label='K̄*(x)')
     ax1.axhline(params.K_0, color='r', linestyle='--', label=f'K₀={params.K_0}')
     ax1.axhline(params.K_0 + params.C, color='orange', linestyle='--', 
                 label=f'K₀+C={params.K_0 + params.C}')
@@ -235,14 +429,15 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir, cir, bond_val
             else:
                 return max(0, F_x - K)
         
-        # Create grid for heatmap (use subset for faster computation)
-        x_heatmap = x_feas[::max(1, len(x_feas)//30)]  # Sample ~30 points
+        # Create grid for heatmap
+        # x_heatmap = x_feas[::max(1, len(x_feas)//30)]  # Sample ~30 points (commented out)
+        x_heatmap = x_feas  # Use full grid for maximum accuracy
         T_heatmap = T_grid
         
         # Initialize value matrix (NaN for infeasible)
         V_matrix = np.full((len(T_heatmap), len(x_heatmap)), np.nan)
         
-                # Compute firm values for feasible combinations
+        # Compute firm values for feasible combinations
         for i, x in enumerate(x_heatmap):
             for j, T in enumerate(T_heatmap):
                 # Find optimal K for this (x, T) pair
@@ -253,9 +448,34 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir, cir, bond_val
                         V_I = firm_val.V_illiquid(x, T, K, K_bar_func, V_bar_approx)
                         if V_I > best_V:
                             best_V = V_I
-                
+            
                 if best_V > -np.inf:
                     V_matrix[j, i] = best_V
+        
+        # Normalize to percentage of optimal value at each x
+        V_matrix_normalized = np.full_like(V_matrix, np.nan)
+        normalization_issues = 0
+        for i in range(V_matrix.shape[1]):
+            col = V_matrix[:, i]
+            valid_mask = ~np.isnan(col)
+            if np.any(valid_mask):
+                max_val = np.max(col[valid_mask])
+                min_val = np.min(col[valid_mask])
+                if max_val > 0:
+                    V_matrix_normalized[valid_mask, i] = (col[valid_mask] / max_val) * 100
+                else:
+                    # If max_val is 0 or negative, something is wrong
+                    normalization_issues += 1
+                    print(f"    Warning: Maturity heatmap column {i} (x={x_heatmap[i]:.2f}) has max_val={max_val:.2f}")
+        
+        if normalization_issues > 0:
+            print(f"  ⚠ Normalization issues in {normalization_issues} columns for maturity heatmap")
+        
+        # Transform to % difference from optimal (100 - value)
+        # This makes values near 100% have small positive values (easier to see with log scale)
+        V_matrix_diff = 100.0 - V_matrix_normalized
+        # Clip to avoid log(0) - use small positive floor
+        V_matrix_diff = np.clip(V_matrix_diff, 0.01, 100)
         
         # Diagnostic: Check variation in firm value at a sample earnings level
         if len(x_heatmap) > 10:
@@ -264,26 +484,34 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir, cir, bond_val
             sample_values = V_matrix[:, sample_idx]
             valid_values = sample_values[~np.isnan(sample_values)]
             if len(valid_values) > 1:
-                print(f"\n  Diagnostic for x={sample_x:.2f}:")
+                print(f"\n  Diagnostic for Maturity heatmap at x={sample_x:.2f}:")
                 print(f"    Firm values across T: min={np.min(valid_values):.2f}, max={np.max(valid_values):.2f}")
                 print(f"    Range: {np.max(valid_values) - np.min(valid_values):.2f}")
-                print(f"    Coefficient of variation: {np.std(valid_values)/np.mean(valid_values)*100:.2f}%")
+                print(f"    Relative range: {(np.max(valid_values) - np.min(valid_values))/np.max(valid_values)*100:.2f}%")
+                # Show difference from optimal distribution
+                sample_diff = V_matrix_diff[:, sample_idx]
+                valid_diff = sample_diff[~np.isnan(sample_diff)]
+                if len(valid_diff) > 1:
+                    print(f"    Difference from optimal: min={np.min(valid_diff):.3f}%, max={np.max(valid_diff):.3f}%")
         
-        # Plot heatmap
-        im = ax2.imshow(V_matrix, aspect='auto', origin='lower',
+        # Plot heatmap with log scale showing % difference from optimal
+        # Use LogNorm for true logarithmic scaling
+        from matplotlib.colors import LogNorm
+        
+        im = ax2.imshow(V_matrix_diff, aspect='auto', origin='lower',
                        extent=[x_heatmap[0], x_heatmap[-1], T_heatmap[0], T_heatmap[-1]],
-                       cmap='viridis', interpolation='nearest')
+                       cmap='viridis_r', interpolation='nearest', 
+                       norm=LogNorm(vmin=0.01, vmax=100))
         
         # Plot optimal maturity on top
         ax2.plot(x_feas, T_hat, 'r-', linewidth=3, label='Optimal T̂(x)')
         ax2.plot(x_feas, T_hat, 'w--', linewidth=1, alpha=0.5)  # White outline for visibility
         
-        # Colorbar
-        cbar = plt.colorbar(im, ax=ax2, label='Firm Value V^I')
-        
+        # Colorbar (note: reversed so dark = close to optimal)
+        cbar = plt.colorbar(im, ax=ax2, label='% Below Optimal (log scale)')
         ax2.set_xlabel('Earnings x')
         ax2.set_ylabel('Maturity T')
-        ax2.set_title('Optimal Maturity')
+        ax2.set_title('Optimal Maturity (darker = closer to optimal)')
         ax2.legend(loc='upper right', fontsize=8)
         ax2.grid(True, alpha=0.2, color='white', linewidth=0.5)
     
@@ -338,7 +566,7 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir, cir, bond_val
         # Initialize value matrix (NaN for infeasible)
         V_matrix = np.full((len(K_heatmap), len(x_heatmap)), np.nan)
         
-        # Compute firm values for feasible combinations
+                # Compute firm values for feasible combinations
         for i, x in enumerate(x_heatmap):
             for j, K in enumerate(K_heatmap):
                 # Find optimal T for this (x, K) pair
@@ -353,6 +581,16 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir, cir, bond_val
                 if best_V > -np.inf:
                     V_matrix[j, i] = best_V
         
+        # Normalize to percentage of optimal value at each x
+        V_matrix_normalized = np.full_like(V_matrix, np.nan)
+        for i in range(V_matrix.shape[1]):
+            col = V_matrix[:, i]
+            valid_mask = ~np.isnan(col)
+            if np.any(valid_mask):
+                max_val = np.max(col[valid_mask])
+                if max_val > 0:
+                    V_matrix_normalized[valid_mask, i] = (col[valid_mask] / max_val) * 100
+        
         # Diagnostic: Check variation in firm value at a sample earnings level
         if len(x_heatmap) > 10:
             sample_idx = len(x_heatmap) // 2  # Middle point
@@ -360,15 +598,15 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir, cir, bond_val
             sample_values = V_matrix[:, sample_idx]
             valid_values = sample_values[~np.isnan(sample_values)]
             if len(valid_values) > 1:
-                print(f"\n  Diagnostic for x={sample_x:.2f}:")
+                print(f"\n  Diagnostic for Face Value heatmap at x={sample_x:.2f}:")
                 print(f"    Firm values across K: min={np.min(valid_values):.2f}, max={np.max(valid_values):.2f}")
                 print(f"    Range: {np.max(valid_values) - np.min(valid_values):.2f}")
-                print(f"    Coefficient of variation: {np.std(valid_values)/np.mean(valid_values)*100:.2f}%")
+                print(f"    Relative range: {(np.max(valid_values) - np.min(valid_values))/np.max(valid_values)*100:.2f}%")
         
-        # Plot heatmap
-        im = ax3.imshow(V_matrix, aspect='auto', origin='lower',
+        # Plot heatmap with normalized values
+        im = ax3.imshow(V_matrix_normalized, aspect='auto', origin='lower',
                        extent=[x_heatmap[0], x_heatmap[-1], K_heatmap[0], K_heatmap[-1]],
-                       cmap='viridis', interpolation='nearest')
+                       cmap='viridis', interpolation='nearest', vmin=0, vmax=100)
         
         # Plot optimal face value on top
         ax3.plot(x_feas, K_hat, 'r-', linewidth=3, label='Optimal K̂(x)')
@@ -378,8 +616,8 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir, cir, bond_val
         ax3.axhline(params.K_0, color='cyan', linestyle=':', 
                    linewidth=2, alpha=0.8, label=f'K₀={params.K_0}')
         
-        # Colorbar
-        cbar = plt.colorbar(im, ax=ax3, label='Firm Value V^I')
+                # Colorbar
+        cbar = plt.colorbar(im, ax=ax3, label='Firm Value (% of optimal at x)')
         
         ax3.set_xlabel('Earnings x')
         ax3.set_ylabel('Face Value K')
@@ -420,20 +658,22 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir, cir, bond_val
     #     ax3.legend(loc='best', fontsize=8)
     #     ax3.grid(True, alpha=0.3)
     
-    # Panel 4: Yield Spread
+        # Panel 4: Yield Spread
     ax4 = plt.subplot(3, 3, 4)
     if len(x_feas) > 0:
-        ax4.plot(x_feas, spread_bp, '-', 
+        x_interp, spread_interp = interpolate_line(x_feas, spread_bp, method=line_interpolation)
+        ax4.plot(x_interp, spread_interp, '-', 
                 linewidth=2.5, color='purple')
         ax4.set_xlabel('Earnings x')
         ax4.set_ylabel('Spread (bp)')
         ax4.set_title('Yield Spread')
         ax4.grid(True, alpha=0.3)
     
-    # Panel 5: Bond Value B̂(x)
+        # Panel 5: Bond Value B̂(x)
     ax5 = plt.subplot(3, 3, 5)
     if len(x_feas) > 0:
-        ax5.plot(x_feas, B_hat, '-', 
+        x_interp, B_interp = interpolate_line(x_feas, B_hat, method=line_interpolation)
+        ax5.plot(x_interp, B_interp, '-', 
                 linewidth=2.5, color='brown')
         ax5.axhline(params.K_0, color='r', linestyle='--', label='K₀', alpha=0.5)
         ax5.set_xlabel('Earnings x')
@@ -442,7 +682,7 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir, cir, bond_val
         ax5.legend()
         ax5.grid(True, alpha=0.3)
         
-                # Format y-axis to show decimals only when needed (no trailing zeros)
+        # Format y-axis to show decimals only when needed (no trailing zeros)
         from matplotlib.ticker import FuncFormatter
         def format_func(value, tick_number):
             # Format with high precision, then remove trailing zeros
@@ -468,19 +708,20 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir, cir, bond_val
         plt.colorbar(scatter, ax=ax6, label='x')
         ax6.grid(True, alpha=0.3)
     
-    # Panel 7: K̄*/F(x) ratio
+        # Panel 7: K̄*/F(x) ratio
     ax7 = plt.subplot(3, 3, 7)
     F_x_grid = np.array([params.mu * (1/(params.r + params.kappa)) + 
                          params.kappa * params.mu / (params.r * (params.r + params.kappa)) 
                          for _ in x_grid])
     ratio = K_bar_array / F_x_grid
-    ax7.plot(x_grid, ratio, 'b-', linewidth=2)
+    x_interp, ratio_interp = interpolate_line(x_grid, ratio, method=line_interpolation)
+    ax7.plot(x_interp, ratio_interp, 'b-', linewidth=2)
     ax7.set_xlabel('Earnings x')
     ax7.set_ylabel('K̄*(x) / F(x)')
     ax7.set_title('Refinancing Capacity Ratio')
     ax7.grid(True, alpha=0.3)
     
-    # Panel 8: Default probability (CIR-based)
+        # Panel 8: Default probability (CIR-based)
     ax8 = plt.subplot(3, 3, 8)
     if len(x_feas) > 0:
         # Calculate true default probability using CIR distribution
@@ -491,21 +732,27 @@ def plot_results(x_grid, K_bar_array, results, params, output_dir, cir, bond_val
             survival_prob = cir.Q(x, T, x_star)  # P(x_T > x*)
             default_prob = 1 - survival_prob  # P(x_T < x*)
             default_prob_cir.append(default_prob)
-    
-        ax8.plot(x_feas, np.array(default_prob_cir) * 100, '-', 
+        
+        default_prob_array = np.array(default_prob_cir) * 100
+        x_interp, prob_interp = interpolate_line(x_feas, default_prob_array, method=line_interpolation)
+        ax8.plot(x_interp, prob_interp, '-', 
                 linewidth=2.5, color='red')
         ax8.set_xlabel('Earnings x')
         ax8.set_ylabel('Default Prob (%)')
         ax8.set_title('Default Probability')
         ax8.grid(True, alpha=0.3)
     
-    # Panel 9: Summary text
+        # Panel 9: Summary text
     ax9 = plt.subplot(3, 3, 9)
     ax9.axis('off')
     
     n_feas = len(x_feas)
     if n_feas > 0:
         summary_text = f"""Base Case Results
+
+Model:
+  Optimization: {optimization_method}
+  Interpolation: {line_interpolation}
         
 Parameters:
   K₀ = {params.K_0}
@@ -636,7 +883,7 @@ def solve_base_case():
     
         print(f"✓ Saved to {output_dir / 'solution.pkl'}")
     
-    # STEP 5: Plot results
+        # STEP 5: Plot results
     print("\n" + "-"*70)
     print("STEP 5: Plotting Results")
     print("-"*70)
@@ -644,8 +891,21 @@ def solve_base_case():
     fig_dir = Path('output/figures')
     fig_dir.mkdir(parents=True, exist_ok=True)
     
+        # Explicitly set interpolation method: 'linear', 'cubic_spline', or 'pchip'
+    interpolation_method = 'pchip'  # Options: 'linear', 'cubic_spline', 'pchip'
+    
     plot_results(x_grid, K_bar_array, results, p, fig_dir, cir, bond_val,
-        K_grid, T_grid, K_bar_func, maturity_bounds, face_value_bounds)
+        K_grid, T_grid, K_bar_func, maturity_bounds, face_value_bounds,
+        line_interpolation=interpolation_method,
+        optimization_method=optimization_method)
+    
+    # STEP 6: Plot maturity sensitivity analysis
+    print("\n" + "-"*70)
+    print("STEP 6: Plotting Maturity Sensitivity Analysis")
+    print("-"*70)
+    
+    plot_maturity_sensitivity(x_grid, K_grid, T_grid, bond_val, K_bar_func, 
+                             p, fig_dir, n_x_samples=5, x_min_plot=20, x_max_plot=100)
     
     # Print summary
     print("\n" + "="*70)
